@@ -1,0 +1,14 @@
+* text=auto
+
+*.py    text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+
+# Binary — don't touch
+*.pdf   binary
+*.png   binary
+*.pth   binary
+*.pt    binary
