@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SigilGHR — Gesture Configuration</title>
+  <meta name="description" content="Configure gesture-to-action mappings for SigilGHR, the local hand gesture macro engine." />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="brand-icon">✦</span>
+      <span class="brand-name">SigilGHR</span>
+      <span class="brand-sub">Gesture Configuration</span>
+    </div>
+    <div class="topbar-status">
+      <span class="dot" id="statusDot"></span>
+      <span id="activeWindowLabel" class="status-label">Detecting…</span>
+    </div>
+  </header>
+
+  <!-- ── Main content ───────────────────────────────────────────────────── -->
+  <main class="content">
+
+    <section class="hero">
+      <h1>Gesture Bindings</h1>
+      <p class="hero-sub">
+        Edit which key combination fires when each gesture is recognised.
+        Changes are saved to <code>sigil_config.json</code> — no restart needed.
+      </p>
+    </section>
+
+    <!-- Plugin cards are injected here by JS -->
+    <div id="pluginGrid" class="plugin-grid"></div>
+
+    <div class="actions">
+      <button id="saveBtn" class="btn-primary" onclick="saveConfig()">
+        <span>Save All Changes</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+      </button>
+      <button class="btn-ghost" onclick="resetConfig()">Reset Defaults</button>
+      <span id="saveMsg" class="save-msg"></span>
+    </div>
+
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    SigilGHR · Habib et al. 2025 · Local engine running on
+    <a href="http://localhost:7272" target="_blank">localhost:7272</a>
+  </footer>
+
+  <!-- ── Script ─────────────────────────────────────────────────────────── -->
+  <script>
+    // ── Constants ──────────────────────────────────────────────────────────
+    const API_CONFIG  = '/api/config';
+    const API_STATUS  = '/api/status';
+
+    // Gesture emoji map — purely cosmetic, makes the table scannable
+    const GESTURE_ICONS = {
+      'Swipe Right': '👉',
+      'Swipe Left':  '👈',
+      'Swipe Up':    '👆',
+      'Swipe Down':  '👇',
+      'Tap':         '👇🏼',
+      'Grab':        '✊',
+      'Expand':      '🤚',
+      'Pinch':       '🤏',
+      'Rotation Clockwise':         '🔄',
+      'Rotation Counter-Clockwise': '🔃',
+      'Shake':       '🤝',
+    };
+
+    // Plugin icon map
+    const PLUGIN_ICONS = {
+      'VLC Player':               '🎬',
+      'VSCode Editor':            '💻',
+      'PowerPoint Presentation':  '📊',
+      'Web Browser':              '🌐',
+      'OBS Studio':               '🎙',
+      'PDF Reader':               '📄',
+    };
+
+    // ── State ──────────────────────────────────────────────────────────────
+    let currentConfig = {};
+
+    // ── Boot ───────────────────────────────────────────────────────────────
+    async function init() {
+      await loadConfig();
+      pollStatus();
+      setInterval(pollStatus, 2000);
+    }
+
+    // ── Load config from API ───────────────────────────────────────────────
+    async function loadConfig() {
+      try {
+        const res  = await fetch(API_CONFIG);
+        currentConfig = await res.json();
+        renderPlugins(currentConfig);
+      } catch (e) {
+        showMsg('⚠ Could not connect to Sigil engine.', 'error');
+      }
+    }
+
+    // ── Render plugin cards ────────────────────────────────────────────────
+    function renderPlugins(config) {
+      const grid = document.getElementById('pluginGrid');
+      grid.innerHTML = '';
+
+      for (const [pluginName, gestures] of Object.entries(config)) {
+        const icon = PLUGIN_ICONS[pluginName] || '🔌';
+        const card = document.createElement('div');
+        card.className = 'plugin-card';
+        card.dataset.plugin = pluginName;
+
+        // Build table rows
+        let rows = '';
+        for (const [gesture, keys] of Object.entries(gestures)) {
+          const gIcon = GESTURE_ICONS[gesture] || '✦';
+          const keyStr = keys.join(' + ');
+          const inputId = `key_${cssId(pluginName)}_${cssId(gesture)}`;
+          rows += `
+            <tr>
+              <td class="gesture-cell">
+                <span class="gesture-icon">${gIcon}</span>
+                <span class="gesture-name">${gesture}</span>
+              </td>
+              <td class="keys-cell">
+                <input
+                  id="${inputId}"
+                  class="key-input"
+                  type="text"
+                  value="${keyStr}"
+                  data-plugin="${pluginName}"
+                  data-gesture="${gesture}"
+                  placeholder="e.g. ctrl + right"
+                  spellcheck="false"
+                  autocomplete="off"
+                />
+              </td>
+            </tr>`;
+        }
+
+        card.innerHTML = `
+          <div class="card-header">
+            <span class="card-icon">${icon}</span>
+            <span class="card-title">${pluginName}</span>
+          </div>
+          <div class="card-body">
+            <table class="binding-table">
+              <thead>
+                <tr>
+                  <th>Gesture</th>
+                  <th>Key Combination</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+
+        grid.appendChild(card);
+      }
+    }
+
+    // ── Collect current form values ────────────────────────────────────────
+    function collectConfig() {
+      const result = {};
+      document.querySelectorAll('.key-input').forEach(input => {
+        const plugin  = input.dataset.plugin;
+        const gesture = input.dataset.gesture;
+        const raw     = input.value.trim();
+        // Split on '+', strip whitespace, lowercase
+        const keys    = raw.split('+').map(k => k.trim().toLowerCase()).filter(Boolean);
+        if (!result[plugin]) result[plugin] = {};
+        result[plugin][gesture] = keys;
+      });
+      return result;
+    }
+
+    // ── Save config ────────────────────────────────────────────────────────
+    async function saveConfig() {
+      const btn = document.getElementById('saveBtn');
+      btn.classList.add('loading');
+      btn.disabled = true;
+
+      const data = collectConfig();
+      try {
+        const res = await fetch(API_CONFIG, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(data),
+        });
+        const json = await res.json();
+        currentConfig = data;
+        showMsg('✓ Saved successfully!', 'ok');
+      } catch (e) {
+        showMsg('✗ Save failed — is Sigil running?', 'error');
+      } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+      }
+    }
+
+    // ── Reset to server defaults ───────────────────────────────────────────
+    async function resetConfig() {
+      if (!confirm('Reset all bindings to defaults?')) return;
+      await loadConfig();
+      showMsg('↺ Reset to defaults.', 'ok');
+    }
+
+    // ── Active window status badge ─────────────────────────────────────────
+    async function pollStatus() {
+      try {
+        const res  = await fetch(API_STATUS);
+        const json = await res.json();
+        const title = json.active_window || '';
+        const dot   = document.getElementById('statusDot');
+        const label = document.getElementById('activeWindowLabel');
+
+        // Highlight if a known plugin matches
+        const isKnown = Object.values({
+          vlc: 'vlc', code: 'vscode', powerpoint: 'powerpoint',
+          chrome: 'browser', firefox: 'browser', edge: 'browser',
+          obs: 'obs', pdf: 'pdf',
+        }).some(kw => title.includes(kw));
+
+        dot.className   = 'dot ' + (isKnown ? 'dot-active' : 'dot-idle');
+        label.textContent = title
+          ? 'Active: ' + title.slice(0, 52) + (title.length > 52 ? '…' : '')
+          : 'No window detected';
+      } catch (_) {
+        // Silently fail — engine might not be running
+      }
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function cssId(str) {
+      return str.replace(/[^a-z0-9]/gi, '_');
+    }
+
+    function showMsg(msg, type) {
+      const el = document.getElementById('saveMsg');
+      el.textContent = msg;
+      el.className   = 'save-msg ' + type;
+      setTimeout(() => { el.textContent = ''; el.className = 'save-msg'; }, 3000);
+    }
+
+    // ── Start ──────────────────────────────────────────────────────────────
+    init();
+  </script>
+
+</body>
+</html>
