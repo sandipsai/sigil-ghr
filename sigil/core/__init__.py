@@ -1,0 +1,3 @@
+"""
+Sigil Core Package.
+"""
